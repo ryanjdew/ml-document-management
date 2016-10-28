@@ -67,6 +67,27 @@ declare function dir:file-details($uri)
     }
 };
 
+declare function find-sub-files($directory as xs:string) {
+  cts:uris($directory, ('properties','concurrent'),
+    cts:and-query((
+      cts:directory-query($directory,"1"),
+      cts:not-query(
+        cts:properties-query(
+          cts:element-query(xs:QName('prop:directory'),cts:and-query(()))
+        )
+      )
+    ))
+  )
+};
 
-
+declare function find-sub-directories($directory as xs:string) {
+  cts:uris($directory, ('properties','concurrent'),
+    cts:and-query((
+      cts:directory-query($directory,"1"),
+      cts:properties-query(
+        cts:element-query(xs:QName('prop:directory'),cts:and-query(()))
+      )
+    ))
+  )
+};
 
