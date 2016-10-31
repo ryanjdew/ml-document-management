@@ -1,0 +1,6 @@
+.ml-directory-explorer.list-group .list-group-item.active {
+  color: #555;
+  text-decoration: none;
+  background-color: #f5f5f5;
+  border-color: #ddd;
+}

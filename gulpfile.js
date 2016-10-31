@@ -7,6 +7,7 @@ var gulp = require('gulp'),
     html2Js = require('gulp-ng-html2js'),
     jshint = require('gulp-jshint'),
     karma = require('karma').server,
+    less = require('gulp-less'),
     minifyHtml = require('gulp-minify-html'),
     path = require('path'),
     rename = require('gulp-rename'),
@@ -22,6 +23,15 @@ gulp.task('jshint', function() {
     ])
     .pipe(jshint())
     .pipe(jshint.reporter('default'));
+});
+
+gulp.task('styles', function() {
+  return gulp.src('./src/styles/*.less')
+    .pipe(concat('ml-document-management.less'))
+    .pipe(gulp.dest('dist'))
+    .pipe(rename('ml-document-management.css'))
+    .pipe(less())
+    .pipe(gulp.dest('dist'));
 });
 
 gulp.task('scripts', ['test'], function() {
@@ -95,4 +105,4 @@ gulp.task('publish-docs', function() {
   .pipe(ghpages());
 });
 
-gulp.task('default', ['jshint', 'scripts', 'templates']);
+gulp.task('default', ['jshint', 'scripts', 'templates', 'styles']);

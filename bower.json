@@ -1,5 +1,6 @@
 {
   "name": "ml-document-management-ng",
+  "version": "0.0.3",
   "authors": [
     "Ryan Dew <ryan.j.dew@gmail.com>"
   ],
@@ -23,6 +24,8 @@
     "tests"
   ],
   "dependencies": {
-    "ml-uploader": "^0.0.6"
+    "ml-uploader": "^0.0.6",
+    "angular-sanitize": "^1.5.8",
+    "angular-bootstrap": "^2.2.0"
   }
 }

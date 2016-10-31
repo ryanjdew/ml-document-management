@@ -2,6 +2,12 @@ xquery version "1.0-ml";
 
 module namespace dir = "http://marklogic.com/ml-document-management/directory-list";
 
+import module namespace dls = "http://marklogic.com/xdmp/dls"
+  at "/MarkLogic/dls.xqy";
+
+declare namespace document-meta = "http://marklogic.com/ml-document-management/document-meta";
+declare namespace prop = "http://marklogic.com/xdmp/property";
+
 declare option xdmp:mapping "false";
 
 declare function dir:directories($directory)
@@ -23,18 +29,16 @@ declare function dir:files($directory)
 
 declare function dir:file-details($uri)
 {
-  let $meta := fn:doc($uri)/property::document-meta:meta/*
+  let $meta := xdmp:document-properties($uri)/prop:properties/document-meta:metadata/*
   let $title := $meta[self::document-meta:title]
   let $description := $meta[self::document-meta:description]
   let $name := (fn:reverse(fn:tokenize($uri, "/"))[. ne ""])[1]
-  let $metadata-uri := $uri || ".xhtml"
   let $doc-is-managed := dls:document-is-managed($uri)
-  let $checkout-status := 
+  let $checkout-status :=
     if ($doc-is-managed) then
       dls:document-checkout-status($uri)
     else ()
   let $doc-permission-roles := xdmp:document-get-permissions($uri)/sec:role-id
-  where fn:doc-available($metadata-uri)
   return
     object-node {
       "metadata": array-node {
@@ -45,12 +49,11 @@ declare function dir:file-details($uri)
             "value": fn:string($meta/document-meta:value)
           }
       },
-      "metaIndex": $metaIndex,
+      "isManaged": $doc-is-managed,
       "document": $uri,
       "fileName": $name,
       "title": fn:string($title),
       "description": fn:string($description),
-      "role": $doc-role,
       "version":
         if ($doc-is-managed) then
           fn:string(
@@ -90,4 +93,3 @@ declare function find-sub-directories($directory as xs:string) {
     ))
   )
 };
-

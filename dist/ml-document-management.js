@@ -2,7 +2,9 @@
   'use strict';
 
   angular.module('ml.document-management', 
-    ['ml.common', 'ml.uploader', 'ui.bootstrap']);
+    ['ml.common', 'ml.uploader', 'ui.bootstrap', 
+      'ml.document-management.tpls','ngSanitize'
+    ]);
 
 }());
 (function () {
@@ -57,17 +59,27 @@
 
     app
       .service('directoryExplorerService', DirectoryExplorerService)
-      .directive('directoryExplorer', DirectoryExplorerDirective);
+      .directive('mlDirectoryExplorer', DirectoryExplorerDirective);
 
     DirectoryExplorerService.$inject = [ '$rootScope', '$http'];
     function DirectoryExplorerService($rootScope, $http) {
       var service = {};
 
-      service.getDirectoryContents = function(dirName, caseUri) {
+      service.getDirectoryContents = function(dirName) {
         return $http.get('/v1/resources/directory-list', {
           'params': {
-            'rs:directory':  dirName,
-            'rs:case-uri': caseUri
+            'rs:directory':  dirName
+          }
+        })
+        .then(function(resp) {
+          return resp.data;
+        });
+      };
+
+      service.getFileDetails = function(fileUri) {
+        return $http.get('/v1/resources/directory-list', {
+          'params': {
+            'rs:file':  fileUri
           }
         })
         .then(function(resp) {
@@ -94,8 +106,7 @@
       'userService',
       '$location',
       '$q',
-      '$state',
-      '$stateParams'
+      '$timeout'
     ];
     function DirectoryExplorerDirective(
       directoryExplorerService,
@@ -105,42 +116,56 @@
       userService,
       $location,
       $q,
-      $state,
-      $stateParams
+      $timeout
     ) {
-      function reloadPage() {
-        $state.transitionTo(
-          $state.current,
-          angular.extend({'#': $location.hash()}, $stateParams),
-          {
-            reload: true, inherit: false, notify: true
+      function reloadFileDetails(docMeta) {
+        directoryExplorerService.getFileDetails(docMeta.document).then(
+          function(data) {
+            angular.extend(docMeta, data);
           }
         );
       }
+
+      function resetFormElement(e) {
+        e.wrap('<form>').closest('form').get(0).reset();
+        e.unwrap();
+      }
+
       var link = function(scope, ele, attr, transclude) {
           scope.user = userService.currentUser() || {};
           scope.model = {};
           scope.files = [];
-          function buildMLCP () {
-            scope.mlcp = {
-              output_collections: 'case-attachments',
-              output_permissions: 'cp-analyst,read,cp-analyst,update',
-              transform_module: '/ext/mlcp/case-attachment-transform.xqy',
-              transform_namespace: 'http://marklogic.com/mlcp-case-attachment',
-              transform_param:
-                'case-uri=' + scope.caseUri +
-                ';annotation=Submitted by ' + scope.user.name +
-                ';sub-uri=' + (scope.subUri || '/'),
-              thread_count: '16'
-            };
-          }
+
+          scope.uploadOptions = {
+            'uriPrefix': (scope.subUri || '/'),
+            'extract': 'properties',
+            'transform': 'dls-management'
+          };
 
           scope.submitDirectory = function() {
+            var dirName = scope.model.newDirectoryName;
+            var fullDirUri = (scope.subUri || '/') +
+              dirName + '/';
             directoryExplorerService.createDirectory(
-              scope.caseUri.replace(/\.xml$/, scope.subUri || '/') +
-              scope.model.newDirectoryName + '/'
+              fullDirUri
             ).then(function() {
-              reloadPage();
+              scope.$createDirectory = false;
+              scope.directories.push({
+                'uri': fullDirUri,
+                'name': dirName
+              });
+              scope.directories.sort(function(a, b) {
+                var nameA = a.name.toUpperCase(); // ignore upper and lowercase
+                var nameB = b.name.toUpperCase(); // ignore upper and lowercase
+                if (nameA < nameB) {
+                  return -1;
+                }
+                if (nameA > nameB) {
+                  return 1;
+                }
+                // names must be equal
+                return 0;
+              });
             });
           };
 
@@ -155,8 +180,6 @@
           scope.openDirectory = function(directory) {
             directory.$open = true;
           };
-
-          buildMLCP();
 
           ele = angular.element(ele);
 
@@ -173,17 +196,17 @@
           function(newVal) {
             if (newVal && newVal.name) {
               scope.user = userService.currentUser();
-              buildMLCP();
             }
           }, true);
 
           directoryExplorerService
             .getDirectoryContents(
-              scope.caseUri.replace(/\.xml$/, scope.subUri || '/'),
-              scope.caseUri
+              scope.subUri
             )
             .then(function (data) {
               scope.directories = data.directories;
+              var directoriesIsEven = scope.directories % 2 === 0;
+              scope.evenFileStart = (directoriesIsEven && scope.isEven) || !(directoriesIsEven || scope.isEven);
               scope.dirFiles = data.files;
             });
 
@@ -212,24 +235,57 @@
             return scope.files[0] ? scope.files[0].done : false;
           }, function(newVal) {
             if (newVal) {
-              reloadPage();
+              var fileName = scope.files[0].name.replace(/\s+/g, '_');
+              scope.files.length = 0;
+              var matchingFile = null;
+              angular.forEach(scope.dirFiles, function(file) {
+                if (!matchingFile && file.name === fileName) {
+                  matchingFile = file;
+                }
+              });
+              if (!matchingFile) {
+                matchingFile = { 
+                  document: scope.subUri + fileName,  
+                  fileName: fileName
+                };
+                scope.dirFiles.push(matchingFile);
+                scope.dirFiles.sort(function(a, b) {
+                  var nameA = a.fileName.toUpperCase(); // ignore upper and lowercase
+                  var nameB = b.fileName.toUpperCase(); // ignore upper and lowercase
+                  if (nameA < nameB) {
+                    return -1;
+                  }
+                  if (nameA > nameB) {
+                    return 1;
+                  }
+                  // names must be equal
+                  return 0;
+                });
+              }
+              $timeout(
+                function() {
+                  reloadFileDetails(matchingFile);
+                },
+                100
+              );
+              resetFormElement(fileInp);
             }
           });
-          scope.model.archiveDocument = function(uri) {
-            dlsService.archiveDocument(uri).then(function() {
-              reloadPage();
+          scope.model.archiveDocument = function(doc) {
+            dlsService.archiveDocument(doc.document).then(function() {
+              reloadFileDetails(doc);
             });
           };
 
-          scope.model.checkoutDocument = function(uri) {
-            dlsService.checkoutDocument(uri).then(function() {
-              reloadPage();
+          scope.model.checkoutDocument = function(doc) {
+            dlsService.checkoutDocument(doc.document).then(function() {
+              reloadFileDetails(doc);
             });
           };
 
-          scope.model.checkinDocument = function(uri) {
-            dlsService.checkinDocument(uri).then(function() {
-              reloadPage();
+          scope.model.checkinDocument = function(doc) {
+            dlsService.checkinDocument(doc.document).then(function() {
+              reloadFileDetails(doc);
             });
           };
 
@@ -242,9 +298,8 @@
         replace: true,
         transclude: true,
         scope: {
-          caseUri: '=',
           subUri: '=',
-          docsMeta: '='
+          isEven: '=?'
         },
         compile: function(element) {
           // Use the compile function from the RecursionHelper,
@@ -270,7 +325,7 @@
       };
     });
 
-  DLSService.$inject = ['$http', '$modal', '$q'];
+  DLSService.$inject = ['$http', '$uibModal', '$q'];
   function DLSService($http, $modal, $q) {
 
     var service = {
@@ -297,6 +352,17 @@
           return resp.data.versions;
         });
       },
+      documentDiff: function(uri, previousUri) {
+        return $http.get('/v1/resources/dls-management', {
+          params: {
+            'rs:command': 'versions-diff',
+            'rs:uri': uri,
+            'rs:previousUri': previousUri
+          }
+        }).then(function(resp) {
+          return resp.data.diffs;
+        });
+      },
       openDocumentVersionsModal: function(fileName, uri) {
         return service.documentVersions(uri).then(function(versions) {
           return service.openDLSModal({
@@ -311,7 +377,6 @@
       },
       editDocumentMetaModal: function(doc) {
         var editingDoc = doc || {};
-        doc.role = doc.role || 'cp-analyst';
         if (!doc.metadata) {
           doc.metadata = [];
         }
@@ -319,12 +384,6 @@
           doc.metadata = [doc.metadata];
         }
         var roles = [];
-        var currentRoleIndex = roles.map(function(v, i) {
-          if (v.value === doc.currentUserRole) {
-            return i;
-          }
-        }).filter(isFinite)[0];
-        roles.splice(currentRoleIndex + 1);
         return service.openDLSModal({
           info: {
             title: (doc.fileName || 'New File') + ': Edit'
@@ -368,30 +427,30 @@
       return dlsCommand('checkin', uri);
     };
 
-    service.patchMetadata = function(newDocMeta, caseUri, index) {
-      var patchXml = '<rapi:patch xmlns:rapi="http://marklogic.com/rest-api">' +
+    service.patchMetadata = function(newDocMeta) {
+      var patchXml = '<rapi:patch xmlns:rapi="http://marklogic.com/rest-api" ' +
+        'xmlns:prop="http://marklogic.com/xdmp/property" ' +
+        'xmlns:document-management="http://marklogic.com/ml-document-management/document-meta">' +
+        '<rapi:replace-insert context="/rapi:metadata/prop:properties" ' +
+        'position="last-child" select="document-management:metadata">' +
+        '<document-management:metadata>' +
         ( newDocMeta.title ?
-          ('<rapi:replace select="/case/associated-documents['+ index +']/title">' +
+          ('<document-management:title>' +
             newDocMeta.title +
-          '</rapi:replace>') : '') +
+          '</document-management:title>') : '') +
         ( newDocMeta.description ?
-          ('<rapi:replace select="/case/associated-documents['+ index +']/description">' +
+          ('<document-management:description>' +
             newDocMeta.description +
-          '</rapi:replace>'): '');
-      if (newDocMeta.metadata) {
-        patchXml += '<rapi:delete select="/case/associated-documents['+ index +']/metadata"  />';
-        if (!angular.isArray(newDocMeta.metadata)) {
-          newDocMeta.metadata = [newDocMeta.metadata];
+          '</document-management:description>'): '');
+      angular.forEach(newDocMeta.metadata, function(val, i) {
+        if (val) {
+          patchXml += '<document-management:data>' +
+            '<document-management:label>' + val.label + '</document-management:label>' +
+            '<document-management:value>' + val.value + '</document-management:value>' +
+            '</document-management:data>';
         }
-        angular.forEach(newDocMeta.metadata, function(val, i) {
-          if (val) {
-            patchXml += '<rapi:insert context="/case/associated-documents['+ index +']" position="last-child">' +
-              '<metadata><label>' +  val.label + '</label><value>' + val.value + '</value></metadata>' +
-              '</rapi:insert>';
-          }
-        });
-      }
-      patchXml += '</rapi:patch>';
+      });
+      patchXml += '</document-management:metadata></rapi:replace-insert></rapi:patch>';
       return $http.patch('/v1/documents',
         patchXml,
         {
@@ -399,45 +458,43 @@
             'Content-Type': 'application/xml'
           },
           params: {
-            uri: caseUri
+            uri: newDocMeta.document,
+            category: 'properties'
           }
         });
     };
 
-    service.editDocumentModal = function(caseUri, doc, docs) {
-      if (angular.isArray(docs)) {
-        var docUri = doc.document;
-        var index = doc.metaIndex;
-        if (!doc.metaIndex) {
-          angular.forEach(docs, function(val, i) {
-            if (docUri === val.document) {
-              index = i + 1;
-            }
-          });
-        }
-        if (index >= 1) {
-          var oldDocRole = doc.role;
-          service.editDocumentMetaModal(doc).then(function(newDocMeta) {
-            if (newDocMeta && (newDocMeta.title || newDocMeta.description)) {
-              service.patchMetadata(newDocMeta, caseUri, index).then(function() {
-                  doc.title = newDocMeta.title;
-                  doc.description = newDocMeta.description;
-                  if (newDocMeta.role && newDocMeta.role !== oldDocRole) {
-                    service.setPermissions(doc.document, newDocMeta.role);
-                  }
-                });
-              }
+    service.editDocumentModal = function(doc) {
+      var docUri = doc.document;
+      service.editDocumentMetaModal(doc).then(function(newDocMeta) {
+        if (newDocMeta && (newDocMeta.title || newDocMeta.description)) {
+          service.patchMetadata(doc).then(function() {
+              doc.title = newDocMeta.title;
+              doc.description = newDocMeta.description;
             });
         }
-      }
+      });
     };
 
     return service;
   }
 
-  DLSModalController.$inject = ['$scope', '$modalInstance', 'config'];
-  function DLSModalController($scope, $modalInstance, config) {
+  DLSModalController.$inject = ['$sce', '$scope', '$uibModalInstance', 'config', 'dlsService'];
+  function DLSModalController($sce, $scope, $modalInstance, config, dlsService) {
     angular.extend($scope, config);
+
+    $scope.getVersionsDiff = function(uri, previousUri) {
+      dlsService.documentDiff(uri, previousUri)
+        .then(function(diffs) {
+          $scope.diffs = diffs;
+        });
+    };
+
+    $scope.clearVersionsDiff = function() {
+      $scope.diffs = null;
+    };
+
+    $scope.sanitize = $sce.trustAsHtml;
 
     $scope.save = function () {
       $modalInstance.close($scope.item);

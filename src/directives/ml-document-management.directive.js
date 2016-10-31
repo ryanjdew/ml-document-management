@@ -97,8 +97,7 @@
       'userService',
       '$location',
       '$q',
-      '$state',
-      '$stateParams'
+      '$timeout'
     ];
     function DirectoryExplorerDirective(
       directoryExplorerService,
@@ -108,8 +107,7 @@
       userService,
       $location,
       $q,
-      $state,
-      $stateParams
+      $timeout
     ) {
       function reloadFileDetails(docMeta) {
         directoryExplorerService.getFileDetails(docMeta.document).then(
@@ -118,10 +116,22 @@
           }
         );
       }
+
+      function resetFormElement(e) {
+        e.wrap('<form>').closest('form').get(0).reset();
+        e.unwrap();
+      }
+
       var link = function(scope, ele, attr, transclude) {
           scope.user = userService.currentUser() || {};
           scope.model = {};
           scope.files = [];
+
+          scope.uploadOptions = {
+            'uriPrefix': (scope.subUri || '/'),
+            'extract': 'properties',
+            'transform': 'dls-management'
+          };
 
           scope.submitDirectory = function() {
             var dirName = scope.model.newDirectoryName;
@@ -186,6 +196,8 @@
             )
             .then(function (data) {
               scope.directories = data.directories;
+              var directoriesIsEven = scope.directories % 2 === 0;
+              scope.evenFileStart = (directoriesIsEven && scope.isEven) || !(directoriesIsEven || scope.isEven);
               scope.dirFiles = data.files;
             });
 
@@ -214,7 +226,7 @@
             return scope.files[0] ? scope.files[0].done : false;
           }, function(newVal) {
             if (newVal) {
-              var fileName = scope.files[0].name;
+              var fileName = scope.files[0].name.replace(/\s+/g, '_');
               scope.files.length = 0;
               var matchingFile = null;
               angular.forEach(scope.dirFiles, function(file) {
@@ -241,7 +253,13 @@
                   return 0;
                 });
               }
-              reloadFileDetails(matchingFile);
+              $timeout(
+                function() {
+                  reloadFileDetails(matchingFile);
+                },
+                100
+              );
+              resetFormElement(fileInp);
             }
           });
           scope.model.archiveDocument = function(doc) {
@@ -272,7 +290,7 @@
         transclude: true,
         scope: {
           subUri: '=',
-          isEven: '?='
+          isEven: '=?'
         },
         compile: function(element) {
           // Use the compile function from the RecursionHelper,

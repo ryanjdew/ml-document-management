@@ -13,7 +13,7 @@
       };
     });
 
-  DLSService.$inject = ['$http', '$modal', '$q'];
+  DLSService.$inject = ['$http', '$uibModal', '$q'];
   function DLSService($http, $modal, $q) {
 
     var service = {
@@ -40,6 +40,17 @@
           return resp.data.versions;
         });
       },
+      documentDiff: function(uri, previousUri) {
+        return $http.get('/v1/resources/dls-management', {
+          params: {
+            'rs:command': 'versions-diff',
+            'rs:uri': uri,
+            'rs:previousUri': previousUri
+          }
+        }).then(function(resp) {
+          return resp.data.diffs;
+        });
+      },
       openDocumentVersionsModal: function(fileName, uri) {
         return service.documentVersions(uri).then(function(versions) {
           return service.openDLSModal({
@@ -54,7 +65,6 @@
       },
       editDocumentMetaModal: function(doc) {
         var editingDoc = doc || {};
-        doc.role = doc.role || 'cp-analyst';
         if (!doc.metadata) {
           doc.metadata = [];
         }
@@ -62,12 +72,6 @@
           doc.metadata = [doc.metadata];
         }
         var roles = [];
-        var currentRoleIndex = roles.map(function(v, i) {
-          if (v.value === doc.currentUserRole) {
-            return i;
-          }
-        }).filter(isFinite)[0];
-        roles.splice(currentRoleIndex + 1);
         return service.openDLSModal({
           info: {
             title: (doc.fileName || 'New File') + ': Edit'
@@ -111,9 +115,12 @@
       return dlsCommand('checkin', uri);
     };
 
-    service.patchMetadata = function(newDocMeta, docUri, index) {
-      var patchXml = '<rapi:patch xmlns:rapi="http://marklogic.com/rest-api">' +
-        '<rapi:replace-insert select="/document-management:metadata">' +
+    service.patchMetadata = function(newDocMeta) {
+      var patchXml = '<rapi:patch xmlns:rapi="http://marklogic.com/rest-api" ' +
+        'xmlns:prop="http://marklogic.com/xdmp/property" ' +
+        'xmlns:document-management="http://marklogic.com/ml-document-management/document-meta">' +
+        '<rapi:replace-insert context="/rapi:metadata/prop:properties" ' +
+        'position="last-child" select="document-management:metadata">' +
         '<document-management:metadata>' +
         ( newDocMeta.title ?
           ('<document-management:title>' +
@@ -123,20 +130,14 @@
           ('<document-management:description>' +
             newDocMeta.description +
           '</document-management:description>'): '');
-      if (newDocMeta.metadata) {
-        patchXml += '<rapi:delete select="/case/associated-documents['+ index +']/metadata"  />';
-        if (!angular.isArray(newDocMeta.metadata)) {
-          newDocMeta.metadata = [newDocMeta.metadata];
+      angular.forEach(newDocMeta.metadata, function(val, i) {
+        if (val) {
+          patchXml += '<document-management:data>' +
+            '<document-management:label>' + val.label + '</document-management:label>' +
+            '<document-management:value>' + val.value + '</document-management:value>' +
+            '</document-management:data>';
         }
-        angular.forEach(newDocMeta.metadata, function(val, i) {
-          if (val) {
-            patchXml += '<document-management:data>' +
-              '<document-management:label>' + val.label + '</document-management:label>' +
-              '<document-management:value>' + val.value + '</document-management:value>' +
-              '</document-management:data>';
-          }
-        });
-      }
+      });
       patchXml += '</document-management:metadata></rapi:replace-insert></rapi:patch>';
       return $http.patch('/v1/documents',
         patchXml,
@@ -145,46 +146,43 @@
             'Content-Type': 'application/xml'
           },
           params: {
-            uri: docUri,
+            uri: newDocMeta.document,
             category: 'properties'
           }
         });
     };
 
-    service.editDocumentModal = function(caseUri, doc, docs) {
-      if (angular.isArray(docs)) {
-        var docUri = doc.document;
-        var index = doc.metaIndex;
-        if (!doc.metaIndex) {
-          angular.forEach(docs, function(val, i) {
-            if (docUri === val.document) {
-              index = i + 1;
-            }
-          });
-        }
-        if (index >= 1) {
-          var oldDocRole = doc.role;
-          service.editDocumentMetaModal(doc).then(function(newDocMeta) {
-            if (newDocMeta && (newDocMeta.title || newDocMeta.description)) {
-              service.patchMetadata(newDocMeta, caseUri, index).then(function() {
-                  doc.title = newDocMeta.title;
-                  doc.description = newDocMeta.description;
-                  if (newDocMeta.role && newDocMeta.role !== oldDocRole) {
-                    service.setPermissions(doc.document, newDocMeta.role);
-                  }
-                });
-              }
+    service.editDocumentModal = function(doc) {
+      var docUri = doc.document;
+      service.editDocumentMetaModal(doc).then(function(newDocMeta) {
+        if (newDocMeta && (newDocMeta.title || newDocMeta.description)) {
+          service.patchMetadata(doc).then(function() {
+              doc.title = newDocMeta.title;
+              doc.description = newDocMeta.description;
             });
         }
-      }
+      });
     };
 
     return service;
   }
 
-  DLSModalController.$inject = ['$scope', '$modalInstance', 'config'];
-  function DLSModalController($scope, $modalInstance, config) {
+  DLSModalController.$inject = ['$sce', '$scope', '$uibModalInstance', 'config', 'dlsService'];
+  function DLSModalController($sce, $scope, $modalInstance, config, dlsService) {
     angular.extend($scope, config);
+
+    $scope.getVersionsDiff = function(uri, previousUri) {
+      dlsService.documentDiff(uri, previousUri)
+        .then(function(diffs) {
+          $scope.diffs = diffs;
+        });
+    };
+
+    $scope.clearVersionsDiff = function() {
+      $scope.diffs = null;
+    };
+
+    $scope.sanitize = $sce.trustAsHtml;
 
     $scope.save = function () {
       $modalInstance.close($scope.item);
