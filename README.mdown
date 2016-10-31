@@ -2,7 +2,7 @@
 
 This is a library for managing documents in MarkLogic. Currently it has the capability to create directories and add files. Files added have their xdmp:document-filter results extracted to the properties. Files are also managed with the MarkLogic DLS.
 
-Mulptiple versions of files are retained and as part of DLS management. The multiple versions can be retrieved and diffs of the extracted data can be displayed.
+Multiple versions of files are retained and as part of DLS management. The multiple versions can be retrieved and diffs of the extracted data can be displayed.
 
 ## Getting Started
 
