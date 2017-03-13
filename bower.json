@@ -7,7 +7,8 @@
   "description": "Library for managing documents in MarkLogic",
   "main": [
     "dist/ml-document-management.css",
-    "dist/ml-document-management.js"
+    "dist/ml-document-management.js",
+    "dist/ml-document-management-ng-tpls.min.js"
   ],
   "keywords": [
     "MarkLogic",
