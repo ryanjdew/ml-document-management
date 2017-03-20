@@ -34,7 +34,8 @@ module.exports = function(config) {
       'bower_components/ml-common-ng/dist/ml-common-ng.js',
       'bower_components/ml-search-ng/dist/ml-search-ng.js',
 
-      'dist/ml-highcharts-ng-tpls.min.js',
+      'dist/ml-document-management-ng-tpls.min.js',
+      'dist/ml-document-management.min.js',
 
       // App under test
       'src/directives/*.js',
