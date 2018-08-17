@@ -25,8 +25,11 @@
     "tests"
   ],
   "dependencies": {
-    "ml-uploader": "^0.0.6",
-    "angular-sanitize": "^1.5.8",
-    "angular-bootstrap": "^2.2.0"
+    "ml-uploader": "^0.0.7",
+    "angular-sanitize": "^1.7.3",
+    "angular-bootstrap": "^2.5.0"
+  },
+  "resolutions": {
+    "angular-bootstrap": "^2.5.0"
   }
 }

@@ -17,7 +17,7 @@ var gulp = require('gulp'),
     cp = require('child_process');
 
 gulp.task('jshint', function() {
-  gulp.src([
+  return gulp.src([
       './gulpfile.js',
       './src/**/*.js'
     ])
@@ -34,36 +34,8 @@ gulp.task('styles', function() {
     .pipe(gulp.dest('dist'));
 });
 
-gulp.task('scripts', ['test'], function() {
-  return gulp.src([
-      './src/ml-document-management.js',
-      './src/**/*.js'
-    ])
-    .pipe(concat('ml-document-management.js'))
-    .pipe(gulp.dest('dist'))
-    .pipe(rename('ml-document-management.min.js'))
-    .pipe(uglify())
-    .pipe(gulp.dest('dist'));
-});
-
-gulp.task('templates', ['test'], function() {
-  return gulp.src([ './src/**/*.html' ])
-    .pipe(minifyHtml({
-        empty: true,
-        spare: true,
-        quotes: true
-    }))
-    .pipe(html2Js({
-      moduleName: 'ml.document-management.tpls',
-      prefix: '/ml-document-management/'
-    }))
-    .pipe(concat('ml-document-management-ng-tpls.min.js'))
-    .pipe(uglify())
-    .pipe(gulp.dest('dist'));
-});
-
 gulp.task('test', function() {
-  karma.start({
+  return karma.start({
     configFile: path.join(__dirname, './karma.conf.js'),
     singleRun: true,
     autoWatch: false
@@ -74,7 +46,7 @@ gulp.task('test', function() {
 });
 
 gulp.task('autotest', function() {
-  karma.start({
+  return karma.start({
     configFile: path.join(__dirname, './karma.conf.js'),
     autoWatch: true
   }, function (exitCode) {
@@ -84,7 +56,7 @@ gulp.task('autotest', function() {
 });
 
 gulp.task('docs', function() {
-  cp.exec('./node_modules/.bin/jsdoc -c jsdoc.conf.json', function(err) {
+  return cp.exec('./node_modules/.bin/jsdoc -c jsdoc.conf.json', function(err) {
     if (err) {
       return console.log(err);
     }
@@ -105,4 +77,32 @@ gulp.task('publish-docs', function() {
   .pipe(ghpages());
 });
 
-gulp.task('default', ['jshint', 'scripts', 'templates', 'styles']);
+gulp.task('scripts', gulp.series(/*'test',*/ function(done) {
+  return gulp.src([
+      './src/ml-document-management.js',
+      './src/**/*.js'
+    ])
+    .pipe(concat('ml-document-management.js'))
+    .pipe(gulp.dest('dist'))
+    .pipe(rename('ml-document-management.min.js'))
+    .pipe(uglify())
+    .pipe(gulp.dest('dist'));
+}));
+
+gulp.task('templates', gulp.series('test', function() {
+  return gulp.src([ './src/**/*.html' ])
+    .pipe(minifyHtml({
+        empty: true,
+        spare: true,
+        quotes: true
+    }))
+    .pipe(html2Js({
+      moduleName: 'ml.document-management.tpls',
+      prefix: '/ml-document-management/'
+    }))
+    .pipe(concat('ml-document-management-ng-tpls.min.js'))
+    .pipe(uglify())
+    .pipe(gulp.dest('dist'));
+}));
+
+gulp.task('default', gulp.series('jshint', 'scripts', 'templates', 'styles', function(done){done();}));
